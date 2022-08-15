@@ -10,7 +10,7 @@ def getDistilBertValueStore():
     # replacing multihead self attention in layer 3 with the MemoryMultiHeadedAttention
     # layer 3 corresponds to transformer block index 2 ( since indexing starts from 0)
     currentAttentionModule = model.transformer.layer[2].attention
-    newAttentionModule = MultiMemoryHeadedAttention(768,768,8,True,512,32,0.1)
+    newAttentionModule = MultiMemoryHeadedAttention(768,768,12,True,512,32,0.1)
 
     # copying attention parameters
     newAttentionModule.load_state_dict(currentAttentionModule.state_dict())
