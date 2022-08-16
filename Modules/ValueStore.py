@@ -151,8 +151,8 @@ class KeyValueStoreLayer(torch.nn.Module):
 # defining memory here for faiss
 class MemoryStore():
     def __init__(self, memory_size, top_k, dimension):
-        #self.db = faiss.IndexHNSWFlat(dimension)
-        self.db = None
+        self.db = faiss.IndexFlat(dimension)
+        #self.db = None
         self.memory_size = memory_size
         self.top_k = top_k
         self.dimension = dimension
