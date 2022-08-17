@@ -171,11 +171,62 @@ def prepareOpenbookQA(examples,tokenizer):
     question_batch['gold_labels'] = gold_labels
     return question_batch
 
+# common sense qa is a 5 question multiple choice dataset
+# important note is that test set has no answer key, so we will just use A for a dummy variable
+# splits are 'validation', 'train', and 'test'
+# preprocessing is similar to openbookqa
+def loadCommonSenseQA(tokenizer):
+    raw_data = load_dataset('commonsense_qa')
+    if split == 'train':
+        processed = raw_data['train'].map(
+            prepareCommonsenseQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["train"].column_names,
+        )
+    elif split == 'validation':
+        processed = raw_data['validation'].map(
+            prepareCommonsenseQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["validation"].column_names,
+        )
+    else:
+        processed = raw_data['test'].map(
+            prepareCommonsenseQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["test"].column_names,
+        )
+    return processed
+
 # preparing commonsense QA
-def prepareCommonsenseQA(data):
-    raw_data = load_dataset('commonsenseqa')
-    print(raw_data)
-    pass
+def prepareCommonsenseQA(examples,tokenizer):
+    # we need to duplicate question stem 5 times for each choice
+    question_texts = examples['question']
+    repeated_questions = [[question] * 5 for question in question_texts]
+    # tokenizing premises with the choices
+    choices = examples['choices']
+    choice_texts = [choice['text'] for choice in choices]
+    # need to flatten everything before tokenizing
+    repeated_questions = np.array(repeated_questions).flatten().tolist()
+    choice_texts = np.array(choice_texts).flatten().tolist()
+    tokenized = tokenizer(repeated_questions, choice_texts,
+                          truncation=True,
+                          max_length=tokenizer.max_len_sentences_pair)
+
+    # need to return groups of 5 basically with the ground truth label
+    # we use char arithmetic here for the correct label index, since 'A'-'A' -> 0 , 'B'-'A'->1 and so on
+    if split == 'test':
+        # then we have the test split, where there is no answer key
+        gold_labels = [0 for i in range(len(examples['question']))]
+    else:
+        gold_labels = [ord(choice_letter) - ord('A') for choice_letter in examples['answerKey']]
+    # grouping each batch of 5 encodings
+    question_batch = {k: [v[i:i + 5] for i in range(0, len(v), 5)] for k, v in tokenized.items()}
+    # adding on gold indices
+    question_batch['gold_labels'] = gold_labels
+    return question_batch
 
 # preparing PG-19 language modeling
 def preparePG19(data):
@@ -186,6 +237,5 @@ def loadGlueBenchmark(tokenizer):
     pass
 
 tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
-
 
 
