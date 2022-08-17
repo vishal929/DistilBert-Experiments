@@ -1,5 +1,7 @@
 # preparing datasets for training and evaluation
 # these functions transform a single example, and then we will use huggingface dataset "map" for batching
+# huggingface has a lot of examples on data preparation for various nlp tasks using their dataset library
+#             and tokenizers, so I am referring to that while writing this code
 
 from datasets import load_dataset
 from transformers import DistilBertTokenizerFast
