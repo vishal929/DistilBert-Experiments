@@ -1,12 +1,11 @@
 # preparing datasets for training and evaluation
 # these functions transform a single example, and then we will use huggingface dataset "map" for batching
 
-import torch
-from torch.utils.data import DataLoader
 from datasets import load_dataset
 from transformers import DistilBertTokenizerFast
+import numpy as np
 
-split = 'validation'
+split = 'test'
 stride = 128
 
 # squad has 'train' and 'validation' splits
@@ -118,38 +117,73 @@ def huggingPrepareSquadTrain(examples,tokenizer):
     inputs["end_positions"] = end_positions
     return inputs
 
-def prepareOpenbookQA(data):
-    pass
+# openbookqa is a multiple choice based language understanding task
+# openbookqa has 'train', 'validation', and 'test' splits
+def loadOpenbookQA(tokenizer):
+    raw_data = load_dataset('openbookqa')
+    if split == 'train':
+        processed = raw_data['train'].map(
+            prepareOpenbookQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["train"].column_names,
+        )
+    elif split == 'validation':
+        processed = raw_data['validation'].map(
+            prepareOpenbookQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["validation"].column_names,
+        )
+    else:
+        processed = raw_data['test'].map(
+            prepareOpenbookQA,
+            batched=True,
+            fn_kwargs={'tokenizer': tokenizer},
+            remove_columns=raw_data["test"].column_names,
+        )
+    return processed
 
-# preparing medQA-USMLE
-def prepareMedQA(data):
-    pass
+
+# per-example preprocessing for openbookqa (to be used with batch processing in huggingface dataset)
+def prepareOpenbookQA(examples,tokenizer):
+    # we need to duplicate question stem 4 times for each choice
+    question_texts = examples['question_stem']
+    repeated_questions = [[question] * 4 for question in question_texts]
+    # tokenizing premises with the choices
+    choices = examples['choices']
+    choice_texts = [choice['text'] for choice in choices]
+    # need to flatten everything before tokenizing
+    repeated_questions = np.array(repeated_questions).flatten().tolist()
+    choice_texts = np.array(choice_texts).flatten().tolist()
+    tokenized = tokenizer(repeated_questions,choice_texts,
+                          truncation=True,
+                          max_length=tokenizer.max_len_sentences_pair)
+
+    # need to return groups of 4 basically with the ground truth label
+    # we use char arithmetic here for the correct label index, since 'A'-'A' -> 0 , 'B'-'A'->1 and so on
+    gold_labels = [ord(choice_letter) - ord('A') for choice_letter in examples['answerKey']]
+    # grouping each batch of 4 encodings
+    question_batch = {k: [v[i:i+4] for i in range(0,len(v),4)] for k,v in tokenized.items()}
+    # adding on gold indices
+    question_batch['gold_labels'] = gold_labels
+    return question_batch
 
 # preparing commonsense QA
 def prepareCommonsenseQA(data):
+    raw_data = load_dataset('commonsenseqa')
+    print(raw_data)
     pass
 
 # preparing PG-19 language modeling
 def preparePG19(data):
     pass
 
+# glue benchmark testing
+def loadGlueBenchmark(tokenizer):
+    pass
+
 tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
 
-tokenized = loadSquad(tokenizer)
 
-'''
-validating that answers in squad are uniform
-for row in squad:
-    if len(squad[0]['answers']['text'])>0:
-        answers = squad[0]['answers']['text']
-        if len(set(answers)) >1:
-            print(row)
-'''
-# setting pytorch format for eval
-'''
-squad.set_format()
-#squad.set_format(type='torch',columns=['id','title','context','question','answers'])
-squadTorch = DataLoader(squad, batch_size = 1)
-for batch in squadTorch:
-    print(batch['title'])
-'''
+
